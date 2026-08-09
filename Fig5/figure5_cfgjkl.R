@@ -3,7 +3,7 @@
 # Figure 5C, 5F, 5G, 5J, 5K and 5L from two patient-level TSV matrices.
 
 required_packages <- c(
-  "data.table", "dplyr", "tidyr", "purrr", "tibble", "survival", "broom",
+  "data.table", "dplyr", "tidyr", "purrr", "tibble", "survival",
   "glmnet", "ggplot2", "ggridges", "ggrepel", "survminer", "patchwork"
 )
 missing_packages <- required_packages[
@@ -15,7 +15,7 @@ if (length(missing_packages)) {
 
 suppressPackageStartupMessages({
   library(data.table); library(dplyr); library(tidyr); library(purrr); library(tibble)
-  library(survival); library(broom); library(glmnet); library(ggplot2)
+  library(survival); library(glmnet); library(ggplot2)
   library(ggridges); library(ggrepel); library(survminer); library(patchwork)
 })
 
@@ -46,7 +46,7 @@ write_tsv <- function(x, filename) {
 }
 
 km_meta <- c(
-  "KM_ID", "TTNT_month", "TTNT_status", "OS_month", "OS_event",
+  "KM_SAMPLE_ID", "TTNT_month", "TTNT_status", "OS_month", "OS_event",
   "cancer_type", "female", "post_profiling"
 )
 genie_meta <- c(
@@ -58,7 +58,7 @@ km <- data.table::fread(args$kmaster, data.table = FALSE, check.names = FALSE)
 genie <- data.table::fread(args$genie, data.table = FALSE, check.names = FALSE)
 if (length(setdiff(km_meta, names(km)))) stop("K-MASTER matrix is missing required columns.")
 if (length(setdiff(genie_meta, names(genie)))) stop("GENIE matrix is missing required columns.")
-if (anyDuplicated(km$KM_ID)) stop("KM_ID must be unique.")
+if (anyDuplicated(km$KM_SAMPLE_ID)) stop("KM_SAMPLE_ID must be unique.")
 if (anyDuplicated(genie$GENIE_PATIENT_ID)) stop("GENIE_PATIENT_ID must be unique.")
 
 feature_columns <- setdiff(names(km), km_meta)
@@ -72,7 +72,7 @@ bad_binary <- feature_columns[
 if (length(bad_binary)) stop("Non-binary feature columns: ", paste(bad_binary, collapse = ", "))
 
 km <- km %>% mutate(
-  KM_ID = as.character(KM_ID), TTNT_month = as.numeric(TTNT_month),
+  KM_SAMPLE_ID = as.character(KM_SAMPLE_ID), TTNT_month = as.numeric(TTNT_month),
   TTNT_status = as.integer(TTNT_status), OS_month = as.numeric(OS_month),
   OS_event = as.integer(OS_event), cancer_type = as.character(cancer_type),
   event_comp = as.integer(TTNT_status %in% c(1L, 2L))
@@ -127,7 +127,9 @@ ggsave(file.path(args$outdir, "Figure5C_TTNT_distribution.png"), p_c,
        width = 10, height = 8, dpi = 300)
 
 # -----------------------------------------------------------------------------
-# Figure 5F: cancer-feature univariable Cox associations
+# Figure 5F: original-style feature association analysis
+# The legacy script compared TTNT distributions with a Wilcoxon test and plotted
+# the median TTNT difference. It did not fit a univariable Cox model for this panel.
 # -----------------------------------------------------------------------------
 fit_univariable <- function(dat, feature) {
   z <- as.integer(dat[[feature]])
@@ -135,13 +137,13 @@ fit_univariable <- function(dat, feature) {
   if (n_pos < 5L || n_neg < 5L || length(unique(z)) < 2L || sum(dat$event_comp) < 3L) {
     return(NULL)
   }
-  fit <- tryCatch(coxph(Surv(TTNT_month, event_comp) ~ z, data = dat),
-                  error = function(e) NULL)
-  if (is.null(fit) || !is.finite(coef(fit)[[1]])) return(NULL)
-  td <- broom::tidy(fit, exponentiate = TRUE, conf.int = TRUE)
+  ttnt_pos <- dat$TTNT_month[z == 1L]
+  ttnt_neg <- dat$TTNT_month[z == 0L]
+  p <- tryCatch(wilcox.test(ttnt_pos, ttnt_neg, exact = FALSE)$p.value,
+                error = function(e) NA_real_)
   tibble(
-    feature = feature, HR = td$estimate[[1]], CI_lower = td$conf.low[[1]],
-    CI_upper = td$conf.high[[1]], p_value = td$p.value[[1]],
+    feature = feature, median_positive = median(ttnt_pos, na.rm = TRUE),
+    median_negative = median(ttnt_neg, na.rm = TRUE), p_value = p,
     n_positive = n_pos, n_negative = n_neg,
     prevalence_percent = 100 * n_pos / (n_pos + n_neg)
   )
@@ -153,13 +155,14 @@ f_results <- map_dfr(eligible_cancers, function(ct) {
   map_dfr(c("female", "post_profiling", feature_columns), ~ fit_univariable(dat, .x)) %>%
     mutate(cancer_type = ct, .before = 1)
 }) %>% mutate(
-  log2_HR = log2(HR), log10_p = -log10(pmax(p_value, .Machine$double.xmin)),
+  median_difference_days = 30.4375 * (median_positive - median_negative),
+  log10_p = -log10(pmax(p_value, .Machine$double.xmin)),
   significant = p_value < 0.05,
   label = paste(cancer_type, feature, sep = "_")
 )
-write_tsv(f_results, "Figure5F_univariable_Cox.tsv")
+write_tsv(f_results, "Figure5F_TTNT_Wilcoxon.tsv")
 f_labels <- f_results %>% filter(significant) %>% arrange(p_value) %>% slice_head(n = 35)
-p_f <- ggplot(f_results, aes(log2_HR, log10_p, color = cancer_type)) +
+p_f <- ggplot(f_results, aes(median_difference_days, log10_p, color = cancer_type)) +
   geom_vline(xintercept = 0, linetype = "dashed", color = "grey60") +
   geom_hline(yintercept = -log10(0.05), linetype = "dashed", color = "grey60") +
   geom_point(aes(size = prevalence_percent), alpha = 0.75) +
@@ -167,7 +170,8 @@ p_f <- ggplot(f_results, aes(log2_HR, log10_p, color = cancer_type)) +
                            size = 2.7, fontface = "italic", max.overlaps = Inf) +
   scale_color_manual(values = cancer_colors) +
   scale_size_continuous(name = "Feature prevalence (%)", range = c(1, 6)) +
-  labs(x = expression(log[2](HR)), y = expression(-log[10](italic(P))), color = "Cancer type") +
+  labs(x = "Median TTNT difference (days; feature-positive minus negative)",
+       y = expression(-log[10](italic(P))), color = "Cancer type") +
   theme_bw(base_size = 10)
 ggsave(file.path(args$outdir, "Figure5F_TTNT_associations.pdf"), p_f,
        width = 11, height = 8, useDingbats = FALSE)
@@ -221,17 +225,22 @@ g_results <- map_dfr(g_cancers, function(ct) {
     if (length(valid) < 2L || sum(boot$event_comp) < 5L) return(tibble())
     x <- as.matrix(boot[, valid, drop = FALSE])
     y <- Surv(boot$TTNT_month, boot$event_comp)
-    fits <- lapply(seq(0.3, 0.9, 0.1), function(alpha_value) {
+    alpha_values <- seq(0.3, 0.9, 0.1)
+    fits <- lapply(alpha_values, function(alpha_value) {
       tryCatch(cv.glmnet(x, y, family = "cox", alpha = alpha_value,
-                         nfolds = min(5L, max(3L, floor(nrow(boot) / 10))),
+                         nfolds = min(5L, nrow(boot) - 1L),
                          standardize = TRUE), error = function(e) NULL)
     })
+    names(fits) <- as.character(alpha_values)
     fits <- Filter(Negate(is.null), fits)
     if (!length(fits)) return(tibble())
-    best <- fits[[which.min(vapply(fits, function(z) min(z$cvm), numeric(1)))]]
+    score <- vapply(fits, function(z) min(z$cvm), numeric(1))
+    best_index <- which.min(score)
+    best <- fits[[best_index]]
     beta <- as.matrix(coef(best, s = "lambda.min"))[, 1]
     tibble(feature = names(beta), coefficient = as.numeric(beta),
-           iteration = iteration_number)
+           iteration = iteration_number, selected_alpha = as.numeric(names(fits)[[best_index]]),
+           selected_lambda = best$lambda.min, nfolds = min(5L, nrow(boot) - 1L))
   }) %>% mutate(cancer_type = ct, .before = 1)
 })
 write_tsv(g_results, "Figure5G_all_resample_coefficients.tsv")
@@ -274,10 +283,10 @@ ggsave(file.path(args$outdir, "Figure5G_elastic_net_stability.png"), p_g,
 # -----------------------------------------------------------------------------
 set.seed(args$seed)
 train_ids <- km %>% group_by(cancer_type) %>%
-  group_modify(~ tibble(KM_ID = sample(
-    .x$KM_ID, size = max(1L, floor(0.70 * nrow(.x))), replace = FALSE
-  ))) %>% ungroup() %>% pull(KM_ID)
-km <- km %>% mutate(split = ifelse(KM_ID %in% train_ids, "train", "test"))
+  group_modify(~ tibble(KM_SAMPLE_ID = sample(
+    .x$KM_SAMPLE_ID, size = max(1L, floor(0.70 * nrow(.x))), replace = FALSE
+  ))) %>% ungroup() %>% pull(KM_SAMPLE_ID)
+km <- km %>% mutate(split = ifelse(KM_SAMPLE_ID %in% train_ids, "train", "test"))
 train <- filter(km, split == "train")
 test <- filter(km, split == "test")
 
@@ -298,13 +307,11 @@ best_i <- which.min(vapply(cv_fits, function(z) min(z$cvm), numeric(1)))
 best_cv <- cv_fits[[best_i]]
 best_alpha <- alpha_grid[[best_i]]
 best_lambda <- best_cv$lambda.min
-final_fit <- glmnet(x_train, y_train, family = "cox", alpha = best_alpha,
-                    lambda = best_lambda, standardize = TRUE)
 
 score_data <- function(dat) {
   x <- make_design(dat, model_features, cancer_levels)
   x <- align_matrix(x, colnames(x_train))
-  as.numeric(predict(final_fit, newx = x, type = "link"))
+  as.numeric(predict(best_cv, newx = x, s = best_lambda, type = "link"))
 }
 train$risk_bad <- score_data(train)
 test$risk_bad <- score_data(test)
@@ -316,7 +323,7 @@ train$risk_group <- assign_group(train$risk_bad)
 test$risk_group <- assign_group(test$risk_bad)
 genie$risk_group <- assign_group(genie$risk_bad)
 
-coef_matrix <- as.matrix(coef(final_fit))
+coef_matrix <- as.matrix(coef(best_cv, s = best_lambda))
 model_coefficients <- tibble(
   feature = rownames(coef_matrix), coefficient = as.numeric(coef_matrix[, 1])
 ) %>% filter(coefficient != 0)
@@ -329,7 +336,7 @@ write_tsv(test, "Figure5J_internal_test_scores.tsv")
 write_tsv(genie, "Figure5K_GENIE_validation_scores.tsv")
 
 saveRDS(list(
-  fit = final_fit, cv_fit = best_cv, alpha = best_alpha, lambda = best_lambda,
+  cv_fit = best_cv, alpha = best_alpha, lambda = best_lambda,
   model_features = model_features, design_columns = colnames(x_train),
   cancer_levels = cancer_levels, training_risk_cutoff = risk_cutoff,
   seed = args$seed
