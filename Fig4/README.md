@@ -46,9 +46,13 @@ be rerun merely to inspect or validate the summary.
 - Cancer types with at least 30 patients are analyzed.
 - Each patient-level feature is compared as present (`1`) versus absent (`0`).
 - Feature prevalence is the percentage of feature-positive patients.
-- The Molecular Prognostic Index is
+- The Molecular Prognostic Index follows the legacy calculation and is
 
-  `-log2(HR) * -log10(Cox P) * prevalence_percent`.
+  `-log2(Cox HR) * -log10(log-rank P) * prevalence_percent`.
+
+  The original workflow used two different P values: log-rank P for the MPI magnitude
+  and Cox Wald P for counting significant resampling iterations. Both are retained in
+  the output as `p_value` and `cox_pval`, respectively.
 
 - For each cancer type, 100 random subsamples are drawn without replacement.
 - A 90% subsample is used when the cancer cohort has fewer than 100 patients; otherwise
@@ -57,7 +61,7 @@ be rerun merely to inspect or validate the summary.
   cancer type and iteration using the sample standard deviation.
 - Figure 4E compares the median repeated-subsampling MPI z-score with the full-cohort
   mutant-minus-WT median OS difference. Point size is the number of iterations with
-  Cox `P < 0.05`.
+  Cox Wald `P < 0.05`.
 - Figure 4F ranks features by their total number of significant iterations and displays
   the leading 42 features. The upper bar is the number of cancer types in which the
   feature was significant in at least one iteration.
