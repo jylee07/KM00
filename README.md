@@ -157,12 +157,12 @@ Rscript Fig4/figure4_aef.R \
 The Molecular Prognostic Index (MPI) is calculated as:
 
 ```text
-MPI = -log2(Cox HR) × -log10(log-rank P) × feature prevalence (%)
+MPI = -log2(Cox HR) × -log10(Cox Wald P) × feature prevalence (%)
 ```
 
 Figure 4 stability analysis uses repeated random subsampling without replacement. A 90%
 subsample is used for cancer cohorts with fewer than 100 patients and an 80% subsample
-for larger cohorts, repeated 100 times. Cox Wald P is retained separately and is used to
+for larger cohorts, repeated 100 times. Log-rank P is retained separately and is used to
 count significant iterations.
 
 ### Figure 5C, F, G, J, K and L
@@ -178,7 +178,9 @@ Rscript Fig5/figure5_cfgjkl.R \
 
 `TTNT_status` is coded as `0` for censoring, `1` for observed second-line treatment, and
 `2` for death before second-line treatment. Figures 5J and 5K use the composite event of
-second-line treatment or death before second-line treatment.
+second-line treatment or death before second-line treatment. The original clinical
+predictors `female` and `late` (age at least 50 years) are retained, and non-positive
+TTNT is excluded before the modeling split.
 
 For the integrated Cox elastic-net model, the 70:30 split is stratified by cancer type.
 Alpha values 0.3-0.9 are compared by 10-fold cross-validation (the original conditional
