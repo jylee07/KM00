@@ -27,8 +27,8 @@ suppressPackageStartupMessages({
 
 parse_args <- function(x) {
   defaults <- list(
-    km_maf = "data/km00_final_hyper_commongene(final_analysis).maf",
-    genie_maf = "data/GENIE_all_white_filter_hypermutated_sub_commongene(final).maf",
+    km_maf = "data/Fig3_KM00.maf",
+    genie_maf = "data/Fig3_GENIE.maf",
     outdir = "results"
   )
   if (length(x) == 0) return(defaults)
