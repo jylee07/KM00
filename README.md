@@ -157,12 +157,13 @@ Rscript Fig4/figure4_aef.R \
 The Molecular Prognostic Index (MPI) is calculated as:
 
 ```text
-MPI = -log2(HR) × -log10(Cox P) × feature prevalence (%)
+MPI = -log2(Cox HR) × -log10(log-rank P) × feature prevalence (%)
 ```
 
 Figure 4 stability analysis uses repeated random subsampling without replacement. A 90%
 subsample is used for cancer cohorts with fewer than 100 patients and an 80% subsample
-for larger cohorts, repeated 100 times.
+for larger cohorts, repeated 100 times. Cox Wald P is retained separately and is used to
+count significant iterations.
 
 ### Figure 5C, F, G, J, K and L
 
@@ -180,12 +181,16 @@ Rscript Fig5/figure5_cfgjkl.R \
 second-line treatment or death before second-line treatment.
 
 For the integrated Cox elastic-net model, the 70:30 split is stratified by cancer type.
-Feature selection, hyperparameter selection, score orientation, and the risk-group cutoff
+Alpha values 0.3-0.9 are compared by 10-fold cross-validation (the original conditional
+rule uses five folds only for training sets smaller than 100), and `lambda.min` is used.
+Feature selection, hyperparameter selection, score direction, and the risk-group cutoff
 are determined using the training cohort only. The internal test and external GENIE-BPC
 cohorts are not used during model selection.
 
-Figure 5G uses 100 bootstrap resamples with replacement. This differs from the repeated
-subsampling without replacement used in Figure 4.
+The feature-association panel uses a Wilcoxon comparison and the median TTNT difference,
+as in the legacy analysis. Figure 5G uses 100 bootstrap resamples with replacement; alpha
+0.3-0.9 and `lambda.min` are selected using up to five-fold CV inside each iteration. This
+differs from the repeated subsampling without replacement used in Figure 4.
 
 ### Figure 6
 
