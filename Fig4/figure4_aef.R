@@ -120,17 +120,26 @@ analyse_feature <- function(dat, feature) {
                  error = function(e) NULL)
   if (is.null(td) || !nrow(td)) return(NULL)
 
+  # Legacy rule: MPI uses the log-rank P value, whereas the count of
+  # significant resampling iterations uses the Cox Wald P value.
+  lr <- tryCatch(survdiff(Surv(time, event) ~ x), error = function(e) NULL)
+  logrank_p <- if (is.null(lr)) NA_real_ else
+    pchisq(lr$chisq, df = length(lr$n) - 1L, lower.tail = FALSE)
+  if (!is.finite(logrank_p)) return(NULL)
+
   hr <- td$estimate[[1]]
-  p <- td$p.value[[1]]
+  cox_p <- td$p.value[[1]]
   prevalence <- 100 * n_mut / (n_mut + n_wt)
-  score_raw <- (-log2(hr)) * (-log10(max(p, .Machine$double.xmin))) * prevalence
+  score_raw <- (-log2(hr)) *
+    (-log10(max(logrank_p, .Machine$double.xmin))) * prevalence
 
   tibble(
     feature = feature,
     HR = hr,
     CI_lower = td$conf.low[[1]],
     CI_upper = td$conf.high[[1]],
-    p_value = p,
+    p_value = logrank_p,
+    cox_pval = cox_p,
     n_mut = n_mut,
     median_os_mut = safe_median_survival(time[x == 1L], event[x == 1L]),
     n_wt = n_wt,
@@ -274,7 +283,7 @@ mpi_summary <- score_results %>%
   summarise(
     median_score_z = median(score_z, na.rm = TRUE),
     n_iterations = sum(!is.na(score_z)),
-    n_significant = sum(p_value < 0.05, na.rm = TRUE),
+    n_significant = sum(cox_pval < 0.05, na.rm = TRUE),
     median_HR = median(HR, na.rm = TRUE),
     median_prevalence = median(prevalence_percent, na.rm = TRUE),
     .groups = "drop"
