@@ -10,7 +10,7 @@ table is required by the public analysis script.
 
 ## Identifiers and endpoints
 
-The K-MASTER identifier is `KM_SAMPLE_ID`. The external identifier is
+The K-MASTER identifier is `KM_ID`. The external identifier is
 `GENIE_PATIENT_ID`.
 
 `TTNT_status` uses:
