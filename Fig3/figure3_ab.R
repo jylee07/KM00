@@ -63,18 +63,18 @@ dir.create(args$outdir, recursive = TRUE, showWarnings = FALSE)
 km <- data.table::fread(args$km_maf, data.table = FALSE, check.names = FALSE)
 genie <- data.table::fread(args$genie_maf, data.table = FALSE, check.names = FALSE)
 
-check_columns(km, c("SAMPLE.ID", "Tumor_Sample_Barcode", "Hugo_Symbol", "sub"), "K-MASTER")
+check_columns(km, c("KM_SAMPLE_ID", "Tumor_Sample_Barcode", "Hugo_Symbol", "sub"), "K-MASTER")
 check_columns(genie, c("Tumor_Sample_Barcode", "Hugo_Symbol", "sub"), "GENIE")
 
-# The supplied K-MASTER MAF has a one-to-one SAMPLE.ID/barcode relationship.
+# The supplied K-MASTER MAF has a one-to-one KM_SAMPLE_ID/barcode relationship.
 # Enforce it so that a future input cannot silently change the denominator.
-km_id_map <- km %>% distinct(SAMPLE.ID, Tumor_Sample_Barcode)
-if (anyDuplicated(km_id_map$SAMPLE.ID) || anyDuplicated(km_id_map$Tumor_Sample_Barcode)) {
-  stop("K-MASTER SAMPLE.ID and Tumor_Sample_Barcode must have a one-to-one relationship.")
+km_id_map <- km %>% distinct(KM_SAMPLE_ID, Tumor_Sample_Barcode)
+if (anyDuplicated(km_id_map$KM_SAMPLE_ID) || anyDuplicated(km_id_map$Tumor_Sample_Barcode)) {
+  stop("K-MASTER KM_SAMPLE_ID and Tumor_Sample_Barcode must have a one-to-one relationship.")
 }
 
 km_clean <- km %>%
-  transmute(cohort = "K-MASTER", patient_id = as.character(SAMPLE.ID),
+  transmute(cohort = "K-MASTER", patient_id = as.character(KM_SAMPLE_ID),
             sample_id = as.character(Tumor_Sample_Barcode),
             cancer_type = as.character(sub), gene = as.character(Hugo_Symbol)) %>%
   filter(!is.na(patient_id), patient_id != "", !is.na(cancer_type), cancer_type != "",
