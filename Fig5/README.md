@@ -34,26 +34,29 @@ Rscript figure5_cfgjkl.R \
 ```
 
 Required packages: `data.table`, `dplyr`, `tidyr`, `purrr`, `tibble`, `survival`,
-`broom`, `glmnet`, `ggplot2`, `ggridges`, `ggrepel`, `survminer`, and `patchwork`.
+`glmnet`, `ggplot2`, `ggridges`, `ggrepel`, `survminer`, and `patchwork`.
 
 ## Panels
 
 - Figure 5C: cancer-specific TTNT ridgeline distributions, capped at 70 months only
   for visualization.
-- Figure 5F: cancer-feature univariable Cox associations for composite treatment
-  durability.
-- Figure 5G: per-cancer elastic-net stability across 100 bootstrap resamples.
+- Figure 5F: cancer-feature TTNT comparisons using the Wilcoxon test and median TTNT
+  difference, matching the uploaded legacy association script. The manuscript legend
+  calls this association plot Figure 5G; the filename retains the requested panel name.
+- Figure 5G: per-cancer elastic-net stability across 100 bootstrap resamples. Every
+  bootstrap iteration compares alpha 0.3-0.9 using up to five-fold CV and uses
+  `lambda.min`. The manuscript legend calls this coefficient plot Figure 5H.
 - Figure 5J: internal 30% test-set treatment-durability Kaplan-Meier plot.
 - Figure 5K: external GENIE-BPC NSCLC treatment-durability validation.
 - Figure 5L: OS plots for the internal test and external validation cohorts.
 
 ## Integrated model
 
-The 70/30 split is stratified by cancer type and uses seed 42. Alpha and lambda are
-selected using only cross-validation within the training cohort. The test cohort is not
-used for model or hyperparameter selection. The risk-group cutoff is the median training
-linear predictor and is applied unchanged to the internal test and external validation
-cohorts.
+The 70/30 split is stratified by cancer type and uses seed 42. The integrated pan-cancer
+model compares alpha 0.3-0.9 by **10-fold CV**, because the uploaded original script
+uses 10 folds when the training set has at least 100 patients (and five folds only below
+100). It uses `lambda.min`. The risk-group cutoff is the training median and is applied
+unchanged to the internal test and external validation cohorts.
 
 For GENIE-BPC, `NSCLC` is mapped to the corresponding K-MASTER `LUCA` design-matrix
 level during prediction; the displayed cohort label remains `NSCLC`.
@@ -67,7 +70,16 @@ regimen-specific OS column remain `NA` and are excluded only from Figure 5L.
 
 ## Important methodological note
 
-This implementation removes test-set leakage present in one exploratory legacy script:
-hyperparameters and score orientation are determined from training data only. Therefore,
-exact risk scores or group assignments may differ from an earlier figure produced by
-test-set-guided model selection. The public code represents the leakage-free analysis.
+The uploaded legacy file contained several successively overwritten exploratory KM
+definitions, including hard-coded cutoffs and a test-outcome-based score flip. Those lines
+cannot all represent one final analysis. This public script preserves the documented
+split, alpha grid, fold rule and `lambda.min`, while locking score direction and cutoff
+without consulting outcomes in the test or validation cohorts. Consequently, group
+assignments may differ from a plot generated from one of the exploratory hard-coded
+branches. The supplied legacy score table can be retained as an audit reference, but it
+is not required as an input.
+
+The simple matrices contain clinical variables, TMB, hotspot and gene-level features.
+They do not contain pathway or MSI columns. Therefore the public association/modeling
+code analyzes the features actually present in the matrices; pathway/MSI points require
+those binary columns to be appended with identical names to both matrices.
