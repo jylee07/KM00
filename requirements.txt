@@ -1,0 +1,6 @@
+pandas
+scipy
+statsmodels
+openpyxl
+lifelines
+numpy
