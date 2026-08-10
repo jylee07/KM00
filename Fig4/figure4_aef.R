@@ -5,7 +5,7 @@
 
 required <- c(
   "data.table", "dplyr", "tidyr", "purrr", "tibble", "survival",
-  "broom", "ggplot2", "survminer", "patchwork", "cowplot", "ggrepel", "scales"
+  "broom", "ggplot2", "survminer", "cowplot", "ggrepel", "scales"
 )
 missing <- required[!vapply(required, requireNamespace, logical(1), quietly = TRUE)]
 if (length(missing)) stop("Install required R packages: ", paste(missing, collapse = ", "))
@@ -20,7 +20,6 @@ suppressPackageStartupMessages({
   library(broom)
   library(ggplot2)
   library(survminer)
-  library(patchwork)
   library(cowplot)
   library(ggrepel)
   library(scales)
@@ -104,6 +103,21 @@ safe_median_survival <- function(time, event) {
   tryCatch(as.numeric(summary(fit)$table[["median"]]), error = function(e) NA_real_)
 }
 
+safe_coxph <- function(formula, data = NULL) {
+  infinite_warning <- FALSE
+  fit <- withCallingHandlers(
+    tryCatch(coxph(formula, data = data), error = function(e) NULL),
+    warning = function(w) {
+      if (grepl("coefficient may be infinite", conditionMessage(w), fixed = TRUE)) {
+        infinite_warning <<- TRUE
+        invokeRestart("muffleWarning")
+      }
+    }
+  )
+  if (is.null(fit) || infinite_warning || any(!is.finite(coef(fit)))) return(NULL)
+  fit
+}
+
 analyse_feature <- function(dat, feature) {
   x <- as.integer(dat[[feature]])
   ok <- is.finite(dat$OS_month) & !is.na(dat$OS_event) & !is.na(x)
@@ -114,7 +128,7 @@ analyse_feature <- function(dat, feature) {
   n_wt <- sum(x == 0L)
   if (n_mut < 1L || n_wt < 1L || length(unique(x)) < 2L || sum(event) < 2L) return(NULL)
 
-  fit <- tryCatch(coxph(Surv(time, event) ~ x), error = function(e) NULL)
+  fit <- safe_coxph(Surv(time, event) ~ x)
   if (is.null(fit) || !is.finite(coef(fit)[[1]])) return(NULL)
   td <- tryCatch(broom::tidy(fit, exponentiate = TRUE, conf.int = TRUE),
                  error = function(e) NULL)
@@ -212,8 +226,7 @@ curve <- ggsurvplot(
 
 a_forest <- map_dfr(sort(unique(a_dat$cancer_abbr)), function(ct) {
   tmp <- a_dat %>% mutate(in_cancer = as.integer(cancer_abbr == ct))
-  fit <- tryCatch(coxph(Surv(OS_month, OS_event) ~ in_cancer, data = tmp),
-                  error = function(e) NULL)
+  fit <- safe_coxph(Surv(OS_month, OS_event) ~ in_cancer, data = tmp)
   if (is.null(fit)) return(tibble())
   td <- broom::tidy(fit, exponentiate = TRUE, conf.int = TRUE)
   tibble(cancer_type = ct, HR = td$estimate[[1]], CI_lower = td$conf.low[[1]],
@@ -235,7 +248,9 @@ forest <- ggplot(a_forest, aes(HR, cancer_type, color = cancer_type)) +
   theme_classic(base_size = 9) +
   theme(plot.margin = margin(5.5, 32, 5.5, 5.5))
 
-panel_a <- curve + forest + plot_layout(widths = c(1.35, 1))
+panel_a <- cowplot::plot_grid(
+  curve, forest, nrow = 1, rel_widths = c(1.35, 1), align = "h", axis = "tb"
+)
 ggsave(file.path(args$outdir, "Figure4A_overall_survival.pdf"), panel_a,
        width = 12, height = 6.2, useDingbats = FALSE)
 ggsave(file.path(args$outdir, "Figure4A_overall_survival.png"), panel_a,
@@ -418,7 +433,9 @@ p_dot <- ggplot(f_df, aes(feature, cancer_abbr)) +
         axis.text.x = element_text(angle = 70, hjust = 1, vjust = 1, face = "italic"),
         legend.position = "right")
 
-panel_f <- p_bar / p_dot + plot_layout(heights = c(1, 4.5))
+panel_f <- cowplot::plot_grid(
+  p_bar, p_dot, ncol = 1, rel_heights = c(1, 4.5), align = "v", axis = "lr"
+)
 ggsave(file.path(args$outdir, "Figure4F_recurrent_MPI_features.pdf"), panel_f,
        width = 13, height = 8, useDingbats = FALSE)
 ggsave(file.path(args$outdir, "Figure4F_recurrent_MPI_features.png"), panel_f,
