@@ -46,7 +46,7 @@ write_tsv <- function(x, filename) {
 }
 
 km_meta <- c(
-  "KM_SAMPLE_ID", "TTNT_month", "TTNT_status", "OS_month", "OS_event",
+  "KM_ID", "TTNT_month", "TTNT_status", "OS_month", "OS_event",
   "cancer_type", "female", "late"
 )
 genie_meta <- c(
@@ -58,7 +58,7 @@ km <- data.table::fread(args$kmaster, data.table = FALSE, check.names = FALSE)
 genie <- data.table::fread(args$genie, data.table = FALSE, check.names = FALSE)
 if (length(setdiff(km_meta, names(km)))) stop("K-MASTER matrix is missing required columns.")
 if (length(setdiff(genie_meta, names(genie)))) stop("GENIE matrix is missing required columns.")
-if (anyDuplicated(km$KM_SAMPLE_ID)) stop("KM_SAMPLE_ID must be unique.")
+if (anyDuplicated(km$KM_ID)) stop("KM_ID must be unique.")
 if (anyDuplicated(genie$GENIE_PATIENT_ID)) stop("GENIE_PATIENT_ID must be unique.")
 
 feature_columns <- setdiff(names(km), km_meta)
@@ -72,7 +72,7 @@ bad_binary <- feature_columns[
 if (length(bad_binary)) stop("Non-binary feature columns: ", paste(bad_binary, collapse = ", "))
 
 km <- km %>% mutate(
-  KM_SAMPLE_ID = as.character(KM_SAMPLE_ID), TTNT_month = as.numeric(TTNT_month),
+  KM_ID = as.character(KM_ID), TTNT_month = as.numeric(TTNT_month),
   TTNT_status = as.integer(TTNT_status), OS_month = as.numeric(OS_month),
   OS_event = as.integer(OS_event), cancer_type = as.character(cancer_type),
   event_comp = as.integer(TTNT_status %in% c(1L, 2L))
@@ -288,10 +288,10 @@ model_genie <- genie %>%
   filter(is.finite(TTNT_month), TTNT_month > 0, TTNT_status %in% c(0L, 1L, 2L))
 
 train_ids <- model_km %>% group_by(cancer_type) %>%
-  group_modify(~ tibble(KM_SAMPLE_ID = sample(
-    .x$KM_SAMPLE_ID, size = max(1L, floor(0.70 * nrow(.x))), replace = FALSE
-  ))) %>% ungroup() %>% pull(KM_SAMPLE_ID)
-model_km <- model_km %>% mutate(split = ifelse(KM_SAMPLE_ID %in% train_ids, "train", "test"))
+  group_modify(~ tibble(KM_ID = sample(
+    .x$KM_ID, size = max(1L, floor(0.70 * nrow(.x))), replace = FALSE
+  ))) %>% ungroup() %>% pull(KM_ID)
+model_km <- model_km %>% mutate(split = ifelse(KM_ID %in% train_ids, "train", "test"))
 train <- filter(model_km, split == "train")
 test <- filter(model_km, split == "test")
 
